@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+websockets
+jinja2
+pyjwt
+numpy
+joblib
+ultralytics
+opencv-python

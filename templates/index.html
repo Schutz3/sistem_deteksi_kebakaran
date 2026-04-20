@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Penilaian Risiko Kebakaran</title>
+    <!-- Tailwind & ChartJS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Html2Canvas & JsPDF (untuk fitur Unduh PDF) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        zinc: { 850: '#202023', 900: '#18181b', }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tab-btn.active { 
+            border-bottom-width: 2px;
+            border-color: #3b82f6;
+            color: #3b82f6;
+        }
+        .glass-card {
+            background: rgba(39, 39, 42, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(82, 82, 91, 0.4);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #27272a; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #52525b; border-radius: 4px; }
+        
+        /* Mengamankan canvas saat export PDF */
+        #exportable-area.printing {
+            background-color: #18181b !important;
+            padding: 20px !important;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen font-sans flex flex-col relative">
+
+    <!-- HEARTBEAT DISCONNECT MODAL -->
+    <div id="disconnect-modal" class="fixed inset-0 bg-zinc-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-zinc-900 border-2 border-red-500/50 rounded-2xl p-6 md:p-10 text-center max-w-sm w-full shadow-[0_0_50px_rgba(239,68,68,0.3)]">
+            <div class="bg-red-500/20 text-red-500 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg class="w-10 h-10 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h2 class="text-2xl font-black text-white mb-2">KONEKSI TERPUTUS!</h2>
+            <p class="text-red-300 text-sm mb-8 font-medium">Sistem diagnostik gagal menerima data terbaru secara terus-menerus selama periode sinkronisasi (10 detik).</p>
+            <button onclick="window.location.reload()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl transition shadow-[0_0_15px_rgba(220,38,38,0.5)]">
+                Sambung Ulang Koneksi
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="max-w-6xl mx-auto w-full p-4 md:p-8 flex-grow space-y-6">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-zinc-800 pb-4">
+            <div class="text-center md:text-left">
+                <div class="flex items-center justify-center md:justify-start gap-3">
+                    <h1 class="text-2xl md:text-3xl lg:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 via-red-500 to-purple-500 tracking-tight">
+                        Dashboard AI Multi-Modal
+                    </h1>
+                     <span id="ws-status" class="bg-yellow-500/20 border border-yellow-500/50 text-yellow-500 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase self-start mt-1 shadow-sm">Connecting</span>
+                </div>
+                <p class="text-zinc-500 mt-1 text-sm font-medium">Halo, <span class="text-zinc-300 uppercase">{{ username }}</span>. Pantau indikator risiko dari seluruh sub-sistem.</p>
+            </div>
+            <div class="flex flex-col items-center md:items-end w-full md:w-auto gap-3">
+                 <div id="global-status" class="px-6 py-2 w-full md:w-auto text-center rounded-full font-black text-sm md:text-base border bg-zinc-800 border-zinc-600 text-zinc-400 shadow-lg tracking-wide transition-all duration-300">
+                    STATUS: MENUNGGU
+                </div>
+                <!-- Tombol Logout -->
+                <a href="/logout" class="text-xs font-semibold text-zinc-400 hover:text-red-400 flex items-center transition bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg active:scale-95 hover:bg-zinc-800">
+                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    Logout Sesi Anda
+                </a>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex overflow-x-auto space-x-6 border-b border-zinc-800 mb-6 px-1 hide-scrollbar">
+            <button class="tab-btn active pb-3 font-semibold text-zinc-400 whitespace-nowrap hover:text-blue-400 transition" onclick="switchTab('tab1', this)">Live Monitoring</button>
+            <button class="tab-btn pb-3 font-semibold text-zinc-400 whitespace-nowrap hover:text-blue-400 transition flex items-center" onclick="switchTab('tab2', this)">Riwayat & Log</button>
+            <button class="tab-btn pb-3 font-semibold text-zinc-400 whitespace-nowrap hover:text-blue-400 transition" onclick="switchTab('tab3', this)">Diagnostik AI</button>
+        </nav>
+
+        <!-- Tab 1: Live Monitoring -->
+        <main id="tab1" class="tab-content active space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- CCTV View -->
+                <div class="lg:col-span-2 glass-card rounded-2xl p-4 md:p-5 flex flex-col relative group">
+                    <h2 class="text-lg md:text-xl font-bold mb-4 text-zinc-200 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-zinc-400 group-hover:text-blue-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        Live Feed Visi Kamera
+                    </h2>
+                    <div class="flex-grow bg-black rounded-lg border border-zinc-700 flex items-center justify-center relative overflow-hidden h-[250px] md:h-[300px] lg:h-auto min-h-[300px] shadow-inner group-hover:border-blue-500/50 transition-colors">
+                        <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 pointer-events-none mix-blend-screen"></div>
+                        <div class="text-center z-10">
+                            <svg class="w-12 h-12 md:w-16 md:h-16 text-zinc-700 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            <span class="text-zinc-500 font-medium text-xs md:text-sm bg-zinc-900/80 backdrop-blur px-3 py-1 rounded-md border border-zinc-800 tracking-widest">KONEKSI KAMERA ESP32-CAM</span>
+                        </div>
+                        <div class="absolute top-3 left-3 md:top-4 md:left-4 flex gap-2 items-center bg-black/60 px-2.5 py-1 rounded-md">
+                            <span class="flex h-2.5 w-2.5 md:h-3 md:w-3 relative">
+                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              <span class="relative inline-flex rounded-full h-2.5 w-2.5 md:h-3 md:w-3 bg-red-500"></span>
+                            </span>
+                            <span class="text-[10px] md:text-xs font-bold text-red-500">REC / BROADCAST</span>
+                        </div>
+                        <div class="absolute bottom-3 right-3 md:bottom-4 md:right-4 text-zinc-500 font-mono text-[10px] md:text-xs bg-black/50 px-2 py-1 rounded" id="camera-timestamp">
+                            --:--:--
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metrics Set -->
+                <div class="grid grid-cols-2 lg:grid-cols-1 gap-4 space-y-0 lg:space-y-4">
+                    <!-- Suhu -->
+                    <div class="glass-card rounded-2xl p-4 md:p-6 border-l-4 border-l-orange-500 relative overflow-hidden group">
+                        <p class="text-xs md:text-sm text-zinc-400 font-semibold uppercase tracking-wide">Suhu Ruangan</p>
+                        <div class="flex items-baseline mt-1 md:mt-2">
+                            <span id="metric-suhu" class="text-3xl md:text-5xl font-extrabold text-white">--</span>
+                            <span class="text-sm md:text-xl text-orange-400 font-bold ml-1.5 md:ml-2">°C</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Asap -->
+                    <div class="glass-card rounded-2xl p-4 md:p-6 border-l-4 border-l-zinc-300 relative overflow-hidden group">
+                        <p class="text-xs md:text-sm text-zinc-400 font-semibold uppercase tracking-wide">Tingkat Asap</p>
+                        <div class="flex items-baseline mt-1 md:mt-2">
+                            <span id="metric-asap" class="text-3xl md:text-5xl font-extrabold text-white">--</span>
+                            <span class="text-sm md:text-xl text-zinc-400 font-bold ml-1.5 md:ml-2">%</span>
+                        </div>
+                    </div>
+
+                    <!-- Probabilitas -->
+                    <div class="col-span-2 lg:col-span-1 glass-card rounded-2xl p-4 md:p-6 border-l-4 border-l-red-500 relative overflow-hidden group hover:border-red-500 transition-colors">
+                        <p class="text-[10px] md:text-xs text-red-300/80 font-bold tracking-wide uppercase mb-1">PROBABILITAS GABUNGAN</p>
+                        <div class="flex items-baseline md:mt-1 relative z-10 w-full justify-between items-end">
+                            <div>
+                                <span id="metric-prob" class="text-5xl md:text-6xl font-black text-white drop-shadow-md">--</span>
+                                <span class="text-lg md:text-xl font-bold text-red-400 ml-1">%</span>
+                            </div>
+                            <div class="opacity-10 group-hover:opacity-20 transition text-red-500 duration-500">
+                                <svg class="h-14 w-14 md:h-16 md:w-16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C7 2 3 6.47 3 12c0 2.27.76 4.37 2.04 6.04L4 19.1V22h2.9l1.06-1.04A9.97 9.97 0 0 0 12 22c5.53 0 10-4.47 10-10S17.53 2 12 2z"/></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Tab 2: Riwayat & Log -->
+        <main id="tab2" class="tab-content space-y-6">
+            <!-- HEADER TOOLBAR UNTUK EXPORT PDF -->
+            <div class="flex justify-end mb-2">
+                <button onclick="downloadPDF()" class="flex items-center text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg shadow-[0_0_15px_rgba(79,70,229,0.3)] active:scale-95 transition focus:ring-2 focus:ring-indigo-400 focus:outline-none">
+                    <svg class="w-4 h-4 mr-2 -ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    Unduh PDF Laporan
+                </button>
+            </div>
+            
+            <div id="exportable-area" class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:bg-transparent rounded-2xl">
+                <!-- Line Chart -->
+                <div class="glass-card rounded-2xl p-4 md:p-5 h-full">
+                    <h2 class="text-lg md:text-xl font-bold mb-4 text-zinc-200 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-indigo-400" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+                        Pemantauan Temporal Sensor
+                    </h2>
+                    <div class="h-64 md:h-[320px] w-full relative">
+                        <canvas id="liveChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Log Table -->
+                <div class="glass-card rounded-2xl p-4 md:p-5 flex flex-col h-[320px] md:h-[380px]">
+                    <h2 class="text-lg md:text-xl font-bold mb-4 text-zinc-200 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                        Insiden & Rekaman Waspada
+                    </h2>
+                    <div class="overflow-y-auto flex-grow custom-scrollbar rounded-lg border border-zinc-800 bg-zinc-900/50" id="log-scroll-container">
+                        <table class="w-full text-left text-xs md:text-sm whitespace-nowrap lg:whitespace-normal">
+                            <thead class="text-[10px] md:text-xs text-zinc-400 uppercase bg-zinc-800/80 sticky top-0 z-10 backdrop-blur-sm">
+                                <tr>
+                                    <th class="px-3 py-2 md:px-4 md:py-3 font-semibold">Waktu</th>
+                                    <th class="px-3 py-2 md:px-4 md:py-3 font-semibold">Tingkat</th>
+                                    <th class="px-3 py-2 md:px-4 md:py-3 font-semibold w-full">Deskripsi Anomali</th>
+                                </tr>
+                            </thead>
+                            <tbody id="log-table-body" class="divide-y divide-zinc-800">
+                                <tr id="no-log-row"><td colspan="3" class="px-4 py-8 text-center text-zinc-500 italic">Mekanisme sistem berjalan aman.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Tab 3: Diagnostik AI Multi-Modal -->
+        <main id="tab3" class="tab-content">
+            <div class="glass-card rounded-3xl p-5 lg:p-10 max-w-5xl mx-auto shadow-2xl">
+                <div class="text-center mb-8 md:mb-12">
+                    <h2 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight mb-2">Fusi Model AI <span class="bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase ml-1 align-middle">Beta</span></h2>
+                    <p class="text-zinc-400 text-xs md:text-sm px-4">Integrasi Arsitektur Computer Vision & Algoritma Statistik Sensor berbasis XGBoost.</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-4 lg:gap-8 items-center">
+                    <!-- YOLOv8 Card -->
+                    <div class="bg-zinc-900/80 p-5 md:p-6 rounded-2xl border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)] relative overflow-hidden group hover:border-blue-500/40 transition">
+                        <div class="absolute -right-12 -top-12 bg-blue-600/10 h-32 w-32 rounded-full blur-3xl group-hover:bg-blue-600/20 transition duration-500"></div>
+                        <div class="flex items-center mb-1">
+                            <h3 class="text-lg md:text-xl font-bold text-zinc-100 flex items-center">
+                                <span class="bg-blue-500/20 p-1.5 rounded-md text-blue-400 mr-2 border border-blue-500/30">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                </span> Visi YOLOv8
+                            </h3>
+                        </div>
+                        <p class="text-[10px] md:text-xs text-zinc-400 mb-4 border-b border-zinc-800 pb-3">Deteksi Presisi Tinggi Via Frame Kamera</p>
+                        
+                        <div class="flex items-end justify-between mb-2">
+                            <span class="text-xs font-medium text-zinc-300">Tingkat Kepercayaan</span>
+                            <span id="ai-yolo-val" class="text-2xl md:text-3xl font-black text-blue-400">--%</span>
+                        </div>
+                        <div class="w-full bg-zinc-950 rounded-full h-3 md:h-4 mb-2 p-0.5 border border-zinc-800 shadow-inner">
+                            <div id="ai-yolo-bar" class="bg-gradient-to-r from-blue-600 to-blue-400 h-full rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- FUSION Core -->
+                    <div class="flex flex-col items-center justify-center relative min-h-[160px] md:min-h-[200px]">
+                        <!-- Connecting lines (desktop only) -->
+                        <div class="hidden md:flex absolute top-1/2 left-0 w-full -translate-y-1/2 justify-between px-2 z-0">
+                            <svg class="w-1/3 text-blue-500/30 -ml-4" stroke="currentColor" fill="none" viewBox="0 0 100 20"><path stroke-dasharray="5,5" stroke-width="2" d="M0 10 Q 50 10 100 10"></path></svg>
+                            <svg class="w-1/3 text-emerald-500/30 -mr-4" stroke="currentColor" fill="none" viewBox="0 0 100 20"><path stroke-dasharray="5,5" stroke-width="2" d="M0 10 Q 50 10 100 10"></path></svg>
+                        </div>
+                        
+                        <div class="z-10 bg-zinc-950 border border-purple-500/30 p-1.5 md:p-2 rounded-full shadow-[0_0_30px_rgba(168,85,247,0.15)] relative">
+                            <div class="absolute inset-0 rounded-full border border-purple-500/50 animate-ping opacity-20"></div>
+                            <div class="bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700 h-36 w-36 md:h-44 md:w-44 rounded-full flex flex-col items-center justify-center p-4 text-center">
+                                <p class="text-[8px] md:text-[10px] font-bold text-zinc-400 mb-1 tracking-widest uppercase">Skor Keputusan AI</p>
+                                <span id="ai-fusion-val" class="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">--%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- XGBoost Card -->
+                    <div class="bg-zinc-900/80 p-5 md:p-6 rounded-2xl border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)] relative overflow-hidden group hover:border-emerald-500/40 transition">
+                        <div class="absolute -left-12 -bottom-12 bg-emerald-600/10 h-32 w-32 rounded-full blur-3xl group-hover:bg-emerald-600/20 transition duration-500"></div>
+                        <div class="flex items-center mb-1">
+                            <h3 class="text-lg md:text-xl font-bold text-zinc-100 flex items-center">
+                                <span class="bg-emerald-500/20 p-1.5 rounded-md text-emerald-400 mr-2 border border-emerald-500/30">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002-2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                                </span> ML XGBoost
+                            </h3>
+                        </div>
+                        <p class="text-[10px] md:text-xs text-zinc-400 mb-4 border-b border-zinc-800 pb-3">Perhitungan Telemetri Parameter Sensor</p>
+                        
+                         <div class="flex items-end justify-between mb-2">
+                            <span class="text-xs font-medium text-zinc-300">Estimasi Prediksi</span>
+                            <span id="ai-xgboost-val" class="text-2xl md:text-3xl font-black text-emerald-400">--%</span>
+                        </div>
+                        <div class="w-full bg-zinc-950 rounded-full h-3 md:h-4 mb-2 p-0.5 border border-zinc-800 shadow-inner">
+                            <div id="ai-xgboost-bar" class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Footer Teams (For Ervin, Akmal, Jascon, and Farhan) -->
+    <footer class="mt-auto py-5 border-t border-zinc-800 bg-zinc-950 text-center text-[10px] md:text-xs text-zinc-500 font-medium z-10 w-full relative drop-shadow-lg">
+        <button id="chat-toggle-btn" onclick="toggleChat()" class="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full p-4 shadow-[0_0_15px_rgba(79,70,229,0.5)] z-50 transition-all transform hover:scale-105 focus:outline-none">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+    </button>
+
+    <div id="chat-window" class="fixed bottom-24 right-6 w-80 sm:w-96 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex-col hidden z-50 overflow-hidden transform transition-all">
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-3 flex justify-between items-center shadow-md z-10 relative">
+            <div class="flex items-center gap-2">
+                <div class="bg-white/20 p-1 rounded-md">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <div>
+                    <h3 class="text-white font-bold text-sm leading-tight">Asisten K3 Darurat</h3>
+                    <p class="text-[10px] text-indigo-200">Terhubung dengan SOP K3 & Sensor</p>
+                </div>
+            </div>
+            <button onclick="toggleChat()" class="text-white/80 hover:text-white transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <div id="chat-messages" class="p-4 h-72 overflow-y-auto flex flex-col space-y-3 custom-scrollbar bg-zinc-950/80 backdrop-blur-sm relative">
+            <div class="flex flex-col items-start w-full">
+                <div class="bg-zinc-800 text-zinc-300 text-xs md:text-sm rounded-xl rounded-tl-none px-3.5 py-2.5 max-w-[85%] border border-zinc-700 shadow-sm">
+                    Halo! Saya AI Asisten K3. Ada yang bisa saya bantu terkait prosedur evakuasi, SOP pemadaman, atau status ruangan saat ini?
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-3 bg-zinc-900 border-t border-zinc-800 flex items-center gap-2">
+            <input type="text" id="chat-input" class="flex-grow bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors" placeholder="Tanyakan SOP K3..." onkeypress="handleChatEnter(event)">
+            <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg p-2.5 transition active:scale-95 shadow-sm">
+                <svg class="w-4 h-4 transform rotate-90" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+            </button>
+        </div>
+    </div>
+        Proyek PBL Semester 6 &copy; 2026. Dikembangkan dengan dedikasi penuh. <br class="md:hidden">
+        <span class="font-bold text-zinc-400 mt-1 inline-block">Tim Pengembang: Ervin, Akmal, Jascon, dan Farhan</span>
+    </footer>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
