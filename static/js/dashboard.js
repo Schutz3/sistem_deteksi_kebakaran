@@ -240,29 +240,57 @@
             }
         }
 
+        // Fungsi utama untuk menambahkan balon chat ke layar
         function appendMessage(text, sender) {
             const wrapper = document.createElement('div');
             wrapper.className = `flex flex-col ${sender === 'user' ? 'items-end' : 'items-start'} w-full`;
             
             const bubble = document.createElement('div');
-            
-            // PERBAIKAN: Penambahan class break-words, leading-relaxed, dan pelebaran max-w menjadi 95%
             bubble.className = sender === 'user' 
-    ? 'bg-indigo-600 text-white text-xs md:text-sm rounded-2xl rounded-tr-none px-4 py-3 max-w-[90%] shadow-md break-words text-left'
-    : 'bg-zinc-800 text-zinc-200 text-xs md:text-sm rounded-2xl rounded-tl-none px-4 py-3 max-w-[95%] border border-zinc-700 shadow-md whitespace-pre-wrap break-words leading-relaxed overflow-x-hidden text-left';
-            
-            // Format teks bot jika ada tag Markdown tebal (**)
-            if(sender === 'bot') {
-                // Mengubah markdown bold **text** menjadi elemen HTML <strong>text</strong>
-                let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                bubble.innerHTML = formattedText;
-            } else {
-                bubble.textContent = text;
-            }
+                ? 'bg-indigo-600 text-white text-sm md:text-base rounded-2xl rounded-tr-none px-5 py-4 max-w-[90%] shadow-lg break-words text-left'
+                : 'bg-zinc-800 text-zinc-200 text-sm md:text-base rounded-2xl rounded-tl-none px-5 py-4 max-w-[95%] border border-zinc-700 shadow-lg whitespace-pre-wrap break-words leading-relaxed overflow-x-hidden text-left';
             
             wrapper.appendChild(bubble);
             chatMessages.appendChild(wrapper);
-            chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scroll
+
+            if (sender === 'bot') {
+                // Mengubah format bold (**) menjadi tag <strong> HTML
+                let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                // Panggil efek mengetik khusus untuk bot
+                typeWriterEffect(bubble, formattedText, 0);
+            } else {
+                // Jika user, langsung tampilkan tanpa animasi
+                bubble.textContent = text;
+                chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scroll
+            }
+        }
+
+        // Fungsi animasi mengetik yang aman dari kerusakan tag HTML
+        function typeWriterEffect(element, htmlString, index) {
+            if (index < htmlString.length) {
+                let char = htmlString.charAt(index);
+                
+                // Jika mendeteksi awalan tag HTML (<), langsung cetak seluruh tag agar format tidak rusak
+                if (char === '<') {
+                    let tagEnd = htmlString.indexOf('>', index);
+                    if (tagEnd !== -1) {
+                        element.innerHTML += htmlString.substring(index, tagEnd + 1);
+                        index = tagEnd + 1;
+                    } else {
+                        element.innerHTML += char;
+                        index++;
+                    }
+                } else {
+                    element.innerHTML += char;
+                    index++;
+                }
+                
+                // Layar otomatis scroll ke bawah mengikuti ketikan
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                // Kecepatan mengetik (atur angka 15 di bawah ini. Semakin kecil = semakin cepat)
+                setTimeout(() => typeWriterEffect(element, htmlString, index), 15); 
+            }
         }
 
         async function sendChatMessage() {

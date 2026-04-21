@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 import asyncio
 import json
@@ -26,15 +26,14 @@ SECRET_KEY = "pbl-sem-6-rahasia-banget"
 ALGORITHM = "HS256"
 
 # --- KONFIGURASI TELEGRAM ---
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
-CHAT_ID = "YOUR_CHAT_ID_HERE"
-THROTTLE_SECONDS = 30
-last_telegram_sent_time = None
+TELEGRAM_TOKEN = "8732833109:AAGTRzTrQ8S0HM5ATBf9dT_PFIGpyqn_tkY"
+CHAT_ID = "8093955878"
+THROTTLE_SECONDS = 50
+last_telegram_sent_time = None   # FIX: variabel global yang benar
 
 # ==========================================
 # LOAD MODELS (Global)
 # ==========================================
-# Memuat model sekali saat startup agar efisien
 try:
     rf_model = joblib.load("models/fire_detection_rf.pkl")
     yolo_model = YOLO("models/best.pt")
@@ -52,7 +51,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # FUNGSI BACKEND: NOTIFIKASI TELEGRAM
 # ==========================================
 def kirim_notifikasi_telegram(status_alert: str, prob: float, suhu: float, asap: float):
-    global last_telegram_sent_times
+    global last_telegram_sent_time
     now = datetime.now()
     
     if last_telegram_sent_time is not None:
@@ -125,52 +124,57 @@ async def logout():
     return response
 
 # ==========================================
-# WEBSOCKET: REAL AI INTEGRATION
+# WEBSOCKET: REAL AI INTEGRATION (FIXED)
 # ==========================================
 @app.websocket("/ws/sensor")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    # Inisialisasi kamera (Ganti URL untuk ESP32-CAM)
-    cap = cv2.VideoCapture(0) 
+    # Inisialisasi kamera (gunakan 0 untuk webcam lokal, ganti dengan URL ESP32 jika perlu)
+    cap = cv2.VideoCapture(0)
+    last_yolo_time = 0          # untuk rate limiting YOLO
+    last_yolo_prob = 0.0        # simpan hasil YOLO terakhir
     
     try:
         while True:
-            # 1. BACA SENSOR (Simulasi data dari ESP32)
+            loop_start = asyncio.get_event_loop().time()
+            
+            # 1. SIMULASI SENSOR (ringan)
             suhu = round(np.random.uniform(25.0, 45.0), 1)
             asap = round(np.random.uniform(0.0, 30.0), 1)
-            co = round(np.random.uniform(0.0, 50.0), 1)      # Contoh: Gas CO
-            lpg = round(np.random.uniform(0.0, 20.0), 1)     # Contoh: Gas LPG
-            humidity = round(np.random.uniform(30.0, 70.0), 1) # Contoh: Kelembapan (Suhu DHT22)
+            co = round(np.random.uniform(0.0, 50.0), 1)
+            lpg = round(np.random.uniform(0.0, 20.0), 1)
+            humidity = round(np.random.uniform(30.0, 70.0), 1)
 
-            # 2. RANDOM FOREST PREDICTION (Sensor)
+            # 2. RANDOM FOREST PREDICTION (dijalankan di thread)
             prob_rf = 0.0
             if rf_model:
-                # Menggunakan urutan fitur: [suhu, asap]
                 input_features = np.array([[suhu, asap, co, lpg, humidity]])
-                pred = rf_model.predict_proba(input_features)
-                prob_rf = round(pred[0][1] * 100, 1)
+                # blocking call -> pindah ke thread
+                prob_rf = await asyncio.to_thread(
+                    lambda: round(rf_model.predict_proba(input_features)[0][1] * 100, 1)
+                )
 
-            # 3. YOLOv8 PREDICTION (Visual)
-            prob_yolo = 0.0
-            ret, frame = cap.read()
-            if ret and yolo_model:
-                results = yolo_model.predict(frame, verbose=False)
-                for r in results:
-                    for box in r.boxes:
-                        if int(box.cls[0]) == 0: # ID Kelas Api
-                            conf = float(box.conf[0]) * 100
-                            if conf > prob_yolo: prob_yolo = round(conf, 1)
+            # 3. YOLO INFERENCE (hanya setiap 5 detik, di thread)
+            current_time = asyncio.get_event_loop().time()
+            if current_time - last_yolo_time >= 5.0:
+                ret, frame = cap.read()
+                if ret and yolo_model:
+                    # Jalankan YOLO di thread agar tidak memblokir
+                    prob_yolo = await asyncio.to_thread(_run_yolo_inference, frame)
+                    last_yolo_prob = prob_yolo
+                else:
+                    last_yolo_prob = 0.0
+                last_yolo_time = current_time
+            
+            prob_yolo = last_yolo_prob
 
-            # 4. DECISION FUSION (Weighted Voting)
-            # Implementasi logika Bobot Dinamis
+            # 4. DECISION FUSION
             if prob_yolo > 50:
-                # Visi dominan saat api terlihat
                 prob_akhir = round((prob_yolo * 0.7) + (prob_rf * 0.3), 1)
             else:
-                # Sensor lebih dipercaya pada fase awal
                 prob_akhir = round((prob_yolo * 0.3) + (prob_rf * 0.7), 1)
 
-            # 5. PENENTUAN STATUS (3 Kelas)
+            # 5. STATUS
             if prob_akhir < 30: status = "Aman"
             elif prob_akhir < 70: status = "Waspada"
             else: status = "Bahaya"
@@ -181,84 +185,75 @@ async def websocket_endpoint(websocket: WebSocket):
                 if status == "Bahaya":
                     asyncio.create_task(asyncio.to_thread(kirim_notifikasi_telegram, status, prob_akhir, suhu, asap))
 
+            # Kirim data ke client
             await websocket.send_text(json.dumps({
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "suhu": suhu,
                 "asap": asap,
                 "prob_yolo": prob_yolo,
-                "prob_xgboost": prob_rf, # Tetap gunakan key ini agar dashboard tidak error
+                "prob_xgboost": prob_rf,
                 "prob_akhir": prob_akhir,
                 "status": status,
                 "log_message": log_message
             }))
-            await asyncio.sleep(2)
+
+            # Tidur 2 detik, namun sisa waktu dihitung agar drift minimal
+            elapsed = asyncio.get_event_loop().time() - loop_start
+            sleep_time = max(0, 2.0 - elapsed)
+            await asyncio.sleep(sleep_time)
 
     except WebSocketDisconnect:
         cap.release()
     except Exception as e:
         cap.release()
         print(f"Error: {e}")
-        
-# Load Database Vektor yang tadi dibuat
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
-retriever = vectorstore.as_retriever(search_kwargs={"k": 3}) # Ambil 3 paragraf paling relevan
 
-# Skema data untuk menerima pesan dari frontend
-class ChatRequest(BaseModel):
-    message: str
-
-@app.post("/api/chat")
-async def chat_with_bot(req: ChatRequest):
-    pertanyaan = req.message
-    
-    # 1. Cari paragraf SOP/K3 yang relevan dari pertanyaan user
-    dokumen_relevan = retriever.invoke(pertanyaan)
-    konteks_sop = "\n\n".join([doc.page_content for doc in dokumen_relevan])
-    
-    # 2. Susun Prompt (Prompt Engineering)
-    # Ini yang akan dikirim ke LLM (seperti GPT/Gemini)
-    system_prompt = f"""Anda adalah Asisten Tanggap Darurat Cerdas.
-    Jawab pertanyaan pengguna secara profesional HANYA berdasarkan panduan SOP K3 berikut:
-    
-    [DOKUMEN SOP K3]
-    {konteks_sop}
-    
-    Pertanyaan: {pertanyaan}
-    Jawaban:"""
-    
-    # 3. Panggil LLM di sini (misal OpenAI API, Gemini API, atau Groq API)
-    # response_llm = panggil_llm(system_prompt) 
-    
-    # Mockup balasan sementara sebelum LLM disambungkan:
-    balasan = f"Berdasarkan SOP K3 kami menemukan info ini:\n{konteks_sop[:200]}..."
-    
-    return {"reply": balasan, "context_used": konteks_sop}
+def _run_yolo_inference(frame):
+    """Helper untuk menjalankan YOLO di thread terpisah"""
+    try:
+        results = yolo_model.predict(frame, verbose=False)
+        max_conf = 0.0
+        for r in results:
+            if r.boxes is not None:
+                for box in r.boxes:
+                    if int(box.cls[0]) == 0:   # kelas api
+                        conf = float(box.conf[0]) * 100
+                        if conf > max_conf:
+                            max_conf = conf
+        return round(max_conf, 1)
+    except Exception as e:
+        print(f"YOLO error: {e}")
+        return 0.0
 
 # ==========================================
-# SETUP KNOWLEDGE BASE & GEMINI LLM
+# SETUP KNOWLEDGE BASE & LLM (sekali saja)
 # ==========================================
+load_dotenv(override=True)
+raw_groq_key = os.getenv("GROQ_API_KEY")
+groq_api_key = raw_groq_key.strip() if raw_groq_key else None
 
-# 1. Load semua variabel rahasia dari file .env
-load_dotenv() 
-# (Sekarang kamu tidak perlu menulis os.environ["GOOGLE_API_KEY"] = "AIza..." lagi!)
+print("\n" + "="*40)
+print(f"Kunci Groq bersih: '{groq_api_key}'")
+print("="*40 + "\n")
 
-# 2. Inisialisasi Model Gemini
-# Library ChatGoogleGenerativeAI akan otomatis mencari GOOGLE_API_KEY dari .env
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.3)
+llm = ChatGroq(
+    model_name="llama-3.1-8b-instant",
+    temperature=0.3,
+    api_key=groq_api_key 
+)
 
-# 3. Load Vector Database (Knowledge Base SOP K3)
+# Load Vector Database (Knowledge Base SOP K3)
 try:
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-    print("Knowledge Base K3 & Gemini LLM berhasil dimuat!")
+    print("Knowledge Base K3 & Groq LLM berhasil dimuat!")
 except Exception as e:
     print(f"Peringatan: ChromaDB belum dibuat atau error. {e}")
     retriever = None
 
 # ==========================================
-# ENDPOINT CHATBOT RAG
+# ENDPOINT CHATBOT RAG (hanya satu)
 # ==========================================
 class ChatRequest(BaseModel):
     message: str
@@ -270,31 +265,27 @@ async def chat_with_bot(req: ChatRequest):
     if not retriever:
         return {"reply": "Maaf, sistem Knowledge Base K3 belum siap.", "context_used": ""}
         
-    # 1. Cari paragraf SOP/K3 yang paling relevan dengan pertanyaan
     dokumen_relevan = retriever.invoke(pertanyaan)
     konteks_sop = "\n\n".join([doc.page_content for doc in dokumen_relevan])
     
-    # 2. Prompt Engineering (Menyuruh Gemini membaca SOP sebelum menjawab)
-    system_prompt = f"""Anda adalah Asisten Tanggap Darurat Keselamatan & Kebakaran (K3) yang profesional.
-    Tugas Anda adalah menjawab pertanyaan pengguna secara DETAIL, KOMPREHENSIF, dan TERSTRUKTUR.
+    system_prompt = f"""Anda adalah Asisten Ahli K3 (Keselamatan dan Kesehatan Kerja), Tanggap Darurat, dan Penanggulangan Kebakaran.
+    Tugas Anda adalah memberikan petunjuk yang AKURAT, CEPAT, dan TERSTRUKTUR berdasarkan dokumen pedoman resmi yang diberikan.
     
     ATURAN SANGAT PENTING:
-    1. Anda HANYA boleh menjawab berdasarkan [DOKUMEN SOP K3] di bawah ini.
-    2. Jika jawaban tidak ada di dalam dokumen, katakan: "Maaf, panduan untuk hal tersebut tidak ditemukan dalam SOP K3 saat ini." Jangan pernah mengarang jawaban sendiri.
-    3. Jabarkan jawaban Anda selengkap mungkin. Gunakan poin-poin (bullet points) jika terdapat langkah-langkah atau prosedur agar mudah dibaca.
+    1. SUMBER INFORMASI: Anda HANYA diizinkan menjawab berdasarkan teks pada [DOKUMEN REFERENSI] di bawah ini.
+    2. ANTI-HALUSINASI: Jika pertanyaan pengguna menanyakan sesuatu yang TIDAK TERCANTUM di dalam [DOKUMEN REFERENSI], Anda WAJIB menjawab persis seperti ini: "Maaf, informasi atau prosedur terkait hal tersebut tidak ditemukan dalam Pedoman K3, Tanggap Darurat, maupun Pedoman Kebakaran yang terdaftar di sistem kami."
+    3. FORMAT JAWABAN: Gunakan poin-poin (bullet points) atau urutan angka untuk menjelaskan prosedur.
     
-    [DOKUMEN SOP K3]
+    [DOKUMEN REFERENSI]
     {konteks_sop}
     
     Pertanyaan Pengguna: {pertanyaan}
     Jawaban:"""
     
     try:
-        # 3. Panggil Gemini API untuk men-generate jawaban (MENGGANTIKAN KODE MOCKUP)
         response = llm.invoke(system_prompt)
         balasan_bot = response.content
     except Exception as e:
-        # Jika API Key salah atau kuota habis, pesan error ini yang akan muncul
-        balasan_bot = f"Terjadi kesalahan saat menghubungi AI Gemini: {e}"
+        balasan_bot = f"Terjadi kesalahan saat menghubungi AI: {e}"
     
     return {"reply": balasan_bot, "context_used": konteks_sop}

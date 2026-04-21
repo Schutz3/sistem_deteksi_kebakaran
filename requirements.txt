@@ -3,7 +3,7 @@ uvicorn
 websockets
 jinja2
 pyjwt
-numpy
+numpys
 joblib
 ultralytics
 opencv-python
