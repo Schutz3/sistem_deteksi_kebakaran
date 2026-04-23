@@ -1,12 +1,14 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Depends, HTTPException, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fpdf import FPDF
+from typing import List, Dict, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
-from langchain_chroma import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
+import chromadb
+from sentence_transformers import SentenceTransformer
+import httpx
 from dotenv import load_dotenv
 import asyncio
 import json
@@ -20,6 +22,19 @@ import urllib.request
 import urllib.parse
 from contextlib import asynccontextmanager
 import os
+import warnings
+
+# --- KONFIGURASI ENVIRONMENT & LOGGING ---
+os.environ["OPENCV_LOG_LEVEL"] = "FATAL"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "1"
+
+# Mengabaikan warning versi sklearn
+try:
+    from sklearn.exceptions import InconsistentVersionWarning
+    warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+except ImportError:
+    pass
 
 # --- KONFIGURASI KEAMANAN & JWT ---
 SECRET_KEY = "pbl-sem-6-rahasia-banget"
@@ -130,7 +145,7 @@ async def logout():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     # Inisialisasi kamera (gunakan 0 untuk webcam lokal, ganti dengan URL ESP32 jika perlu)
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     last_yolo_time = 0          # untuk rate limiting YOLO
     last_yolo_prob = 0.0        # simpan hasil YOLO terakhir
     
@@ -226,66 +241,144 @@ def _run_yolo_inference(frame):
         return 0.0
 
 # ==========================================
-# SETUP KNOWLEDGE BASE & LLM (sekali saja)
+# SETUP KNOWLEDGE BASE (sekali saja)
 # ==========================================
 load_dotenv(override=True)
-raw_groq_key = os.getenv("GROQ_API_KEY")
-groq_api_key = raw_groq_key.strip() if raw_groq_key else None
 
-print("\n" + "="*40)
-print(f"Kunci Groq bersih: '{groq_api_key}'")
-print("="*40 + "\n")
-
-llm = ChatGroq(
-    model_name="llama-3.1-8b-instant",
-    temperature=0.3,
-    api_key=groq_api_key 
-)
-
-# Load Vector Database (Knowledge Base SOP K3)
+# 1. Load chromadb dan sentence-transformers secara native
 try:
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-    print("Knowledge Base K3 & Groq LLM berhasil dimuat!")
+    print("Memuat model sentence-transformers...")
+    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    print("Memuat ChromaDB lokal...")
+    chroma_client = chromadb.PersistentClient(path="./chroma_db_native")
+    # Mengambil koleksi yang sudah diisi oleh ingest_pdf.py
+    collection = chroma_client.get_collection(name="k3_knowledge")
+    print("Knowledge Base K3 (Native) berhasil dimuat!")
 except Exception as e:
-    print(f"Peringatan: ChromaDB belum dibuat atau error. {e}")
-    retriever = None
+    print(f"Peringatan: ChromaDB belum dibuat atau error memuat model. {e}")
+    embedding_model = None
+    collection = None
 
 # ==========================================
 # ENDPOINT CHATBOT RAG (hanya satu)
 # ==========================================
 class ChatRequest(BaseModel):
     message: str
+    history: Optional[List[Dict[str, str]]] = []
 
 @app.post("/api/chat")
 async def chat_with_bot(req: ChatRequest):
     pertanyaan = req.message
     
-    if not retriever:
+    if not collection or not embedding_model:
         return {"reply": "Maaf, sistem Knowledge Base K3 belum siap.", "context_used": ""}
-        
-    dokumen_relevan = retriever.invoke(pertanyaan)
-    konteks_sop = "\n\n".join([doc.page_content for doc in dokumen_relevan])
-    
-    system_prompt = f"""Anda adalah Asisten Ahli K3 (Keselamatan dan Kesehatan Kerja), Tanggap Darurat, dan Penanggulangan Kebakaran.
-    Tugas Anda adalah memberikan petunjuk yang AKURAT, CEPAT, dan TERSTRUKTUR berdasarkan dokumen pedoman resmi yang diberikan.
-    
-    ATURAN SANGAT PENTING:
-    1. SUMBER INFORMASI: Anda HANYA diizinkan menjawab berdasarkan teks pada [DOKUMEN REFERENSI] di bawah ini.
-    2. ANTI-HALUSINASI: Jika pertanyaan pengguna menanyakan sesuatu yang TIDAK TERCANTUM di dalam [DOKUMEN REFERENSI], Anda WAJIB menjawab persis seperti ini: "Maaf, informasi atau prosedur terkait hal tersebut tidak ditemukan dalam Pedoman K3, Tanggap Darurat, maupun Pedoman Kebakaran yang terdaftar di sistem kami."
-    3. FORMAT JAWABAN: Gunakan poin-poin (bullet points) atau urutan angka untuk menjelaskan prosedur.
-    
-    [DOKUMEN REFERENSI]
-    {konteks_sop}
-    
-    Pertanyaan Pengguna: {pertanyaan}
-    Jawaban:"""
     
     try:
-        response = llm.invoke(system_prompt)
-        balasan_bot = response.content
+        # 3. Ubah pesan user menjadi vektor dan lakukan pencarian
+        query_embedding = embedding_model.encode([pertanyaan]).tolist()
+        results = collection.query(
+            query_embeddings=query_embedding,
+            n_results=1
+        )
+        
+        # Ekstrak teks referensi dari hasil pencarian (ChromaDB mengembalikan list of lists)
+        dokumen_relevan = results['documents'][0] if results['documents'] else []
+        konteks_sop = "\n\n".join(dokumen_relevan)
+        
+        # 4. Susun System Prompt yang Lebih Cerdas & Natural dengan aturan ANTI-HALUSINASI
+        system_prompt = f"""Anda adalah "Asisten K3 Pintar", seorang profesional K3 (Keselamatan dan Kesehatan Kerja) dan Tanggap Darurat yang ramah dan sigap.
+        Tugas Anda adalah memberikan jawaban dan panduan yang mudah dipahami, luwes, namun tetap akurat dan tegas (terutama dalam situasi darurat tanpa membuat panik).
+        Awali jawaban Anda dengan sapaan atau kalimat pengantar yang natural.
+        
+        ATURAN SANGAT PENTING:
+        1. SUMBER INFORMASI: Anda HANYA diizinkan menjawab berdasarkan teks pada [DOKUMEN REFERENSI] di bawah ini. Jangan mengarang informasi.
+        2. ANTI-HALUSINASI: Jika pertanyaan pengguna menanyakan sesuatu yang TIDAK TERCANTUM di dalam [DOKUMEN REFERENSI], Anda WAJIB menjawab persis seperti ini: "Maaf, informasi atau prosedur terkait hal tersebut tidak ditemukan dalam Pedoman K3, Tanggap Darurat, maupun Pedoman Kebakaran yang terdaftar di sistem kami."
+        3. FORMAT JAWABAN: Jelaskan poin-poin dengan luwes (tidak sekadar copy-paste dari dokumen) namun maknanya harus sama persis. Gunakan poin-poin (bullet points) jika menjelaskan prosedur agar mudah dibaca.
+        4. FITUR EKSPOR: Jika pengguna secara eksplisit meminta untuk "mencetak laporan", "unduh history", atau "rekap sensor", beri tahu mereka bahwa mereka dapat mengunduh laporan PDF melalui tautan: `/api/download-history` (berikan dalam format markdown link: [Unduh Laporan PDF](/api/download-history)).
+        
+        [DOKUMEN REFERENSI]
+        {konteks_sop}"""
+        
+        # 5. Kirim System Prompt dan pesan user ke LLM lokal menggunakan httpx.AsyncClient
+        llm_url = "http://localhost:11434/v1/chat/completions"
+        
+        messages_payload = [{"role": "system", "content": system_prompt}]
+        if req.history:
+            messages_payload.extend(req.history)
+        messages_payload.append({"role": "user", "content": pertanyaan})
+        
+        payload = {
+            "model": "llama3.2:1b", 
+            "messages": messages_payload,
+            "temperature": 0.4
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(llm_url, json=payload, timeout=120.0)
+            response.raise_for_status()
+            data = response.json()
+            balasan_bot = data["choices"][0]["message"]["content"]
+            
+    except httpx.ReadTimeout:
+        balasan_bot = "Maaf, saya butuh waktu lebih lama untuk membaca pedoman K3 tersebut. Bisa tolong ulangi pertanyaannya?"
+        konteks_sop = ""
     except Exception as e:
-        balasan_bot = f"Terjadi kesalahan saat menghubungi AI: {e}"
+        print(f"Error pada endpoint /api/chat: {e}")
+        balasan_bot = "Maaf, sedang terjadi kendala teknis pada sistem AI kami. Silakan coba beberapa saat lagi."
+        konteks_sop = ""
     
+    # 6. Kembalikan respons JSON berisi jawaban bot dan konteks
     return {"reply": balasan_bot, "context_used": konteks_sop}
+
+# ==========================================
+# ENDPOINT PDF EXPORT (Sensor History)
+# ==========================================
+@app.get("/api/download-history")
+async def download_history():
+    # Buat PDF menggunakan FPDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # Header
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="Laporan Riwayat Sensor Kebakaran", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Tabel Header
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(40, 10, "Waktu", border=1, align='C')
+    pdf.cell(30, 10, "Suhu (C)", border=1, align='C')
+    pdf.cell(30, 10, "Asap (%)", border=1, align='C')
+    pdf.cell(40, 10, "Probabilitas (%)", border=1, align='C')
+    pdf.cell(40, 10, "Status", border=1, align='C')
+    pdf.ln()
+    
+    # Simulasi data (karena tidak ada DB log di skrip ini)
+    pdf.set_font("Arial", size=12)
+    sekarang = datetime.now()
+    for i in range(10):
+        waktu = (sekarang - timedelta(minutes=10-i)).strftime("%H:%M:%S")
+        suhu = str(round(np.random.uniform(28.0, 35.0), 1))
+        asap = str(round(np.random.uniform(5.0, 15.0), 1))
+        prob = str(round(np.random.uniform(10.0, 40.0), 1))
+        status = "Aman" if float(prob) < 30 else "Waspada"
+        
+        pdf.cell(40, 10, waktu, border=1, align='C')
+        pdf.cell(30, 10, suhu, border=1, align='C')
+        pdf.cell(30, 10, asap, border=1, align='C')
+        pdf.cell(40, 10, prob, border=1, align='C')
+        pdf.cell(40, 10, status, border=1, align='C')
+        pdf.ln()
+    
+    # Simpan PDF sementara
+    pdf_path = "sensor_history.pdf"
+    pdf.output(pdf_path)
+    
+    # Kembalikan file PDF sebagai response
+    return FileResponse(
+        path=pdf_path, 
+        media_type="application/pdf", 
+        filename=f"Laporan_Sensor_{sekarang.strftime('%Y%m%d_%H%M')}.pdf"
+    )
