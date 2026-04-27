@@ -25,7 +25,7 @@ THROTTLE_SECONDS = 50
 
 # --- Path Model ---
 YOLO_MODEL_PATH = "models/best.pt"
-XGBOOST_MODEL_PATH = "models/fire_detection_xgb.pkl"
+XGBOOST_MODEL_PATH = "models/fire_detection_rf.pkl"
 CHATBOT_MODEL_PATH = os.getenv("CHATBOT_MODEL_PATH", "models/tinyllama-1.1b-chat.Q4_K_M.gguf")
 
 # --- ChromaDB ---
