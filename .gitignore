@@ -2,3 +2,5 @@
 models/
 chroma_db/
 .env
+app/__pycache__
+SYSTEM_MAP.md

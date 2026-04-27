@@ -3,54 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Penilaian Risiko Kebakaran</title>
+    <title>Sistem Deteksi Kebakaran - Dashboard AI</title>
+    <meta name="description" content="Dashboard AI Multi-Modal untuk sistem deteksi kebakaran real-time">
     <!-- Tailwind & ChartJS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- Html2Canvas & JsPDF (untuk fitur Unduh PDF) -->
+    <!-- Html2Canvas & JsPDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
     <script>
         tailwind.config = {
             darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        zinc: { 850: '#202023', 900: '#18181b', }
-                    }
-                }
-            }
+            theme: { extend: { colors: { zinc: { 850: '#202023', 900: '#18181b' } } } }
         }
     </script>
     <style>
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.3s ease-out; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(5px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .tab-btn.active { 
-            border-bottom-width: 2px;
-            border-color: #3b82f6;
-            color: #3b82f6;
-        }
-        .glass-card {
-            background: rgba(39, 39, 42, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(82, 82, 91, 0.4);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .tab-btn.active { border-bottom-width: 2px; border-color: #3b82f6; color: #3b82f6; }
+        .glass-card { background: rgba(39,39,42,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(82,82,91,0.4); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #27272a; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #52525b; border-radius: 4px; }
-        
-        /* Mengamankan canvas saat export PDF */
-        #exportable-area.printing {
-            background-color: #18181b !important;
-            padding: 20px !important;
-        }
+        #exportable-area.printing { background-color: #18181b !important; padding: 20px !important; }
+        .input-field { background: #09090b; border: 1px solid #3f3f46; color: #e4e4e7; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; width: 100%; }
+        .input-field:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+        .btn-primary { background: #4f46e5; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.875rem; transition: all 0.2s; }
+        .btn-primary:hover { background: #4338ca; }
+        .btn-danger { background: #dc2626; color: white; padding: 0.375rem 0.75rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.75rem; transition: all 0.2s; }
+        .btn-danger:hover { background: #b91c1c; }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen font-sans flex flex-col relative">
@@ -62,7 +44,7 @@
                 <svg class="w-10 h-10 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
             </div>
             <h2 class="text-2xl font-black text-white mb-2">KONEKSI TERPUTUS!</h2>
-            <p class="text-red-300 text-sm mb-8 font-medium">Sistem diagnostik gagal menerima data terbaru secara terus-menerus selama periode sinkronisasi (10 detik).</p>
+            <p class="text-red-300 text-sm mb-8 font-medium">Sistem gagal menerima data selama 10 detik.</p>
             <button onclick="window.location.reload()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl transition shadow-[0_0_15px_rgba(220,38,38,0.5)]">
                 Sambung Ulang Koneksi
             </button>
@@ -86,19 +68,22 @@
                  <div id="global-status" class="px-6 py-2 w-full md:w-auto text-center rounded-full font-black text-sm md:text-base border bg-zinc-800 border-zinc-600 text-zinc-400 shadow-lg tracking-wide transition-all duration-300">
                     STATUS: MENUNGGU
                 </div>
-                <!-- Tombol Logout -->
                 <a href="/logout" class="text-xs font-semibold text-zinc-400 hover:text-red-400 flex items-center transition bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg active:scale-95 hover:bg-zinc-800">
                     <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                    Logout Sesi Anda
+                    Logout
                 </a>
             </div>
         </header>
 
         <!-- Navigation Tabs -->
-        <nav class="flex overflow-x-auto space-x-6 border-b border-zinc-800 mb-6 px-1 hide-scrollbar">
+        <nav class="flex overflow-x-auto space-x-6 border-b border-zinc-800 mb-6 px-1">
             <button class="tab-btn active pb-3 font-semibold text-zinc-400 whitespace-nowrap hover:text-blue-400 transition" onclick="switchTab('tab1', this)">Live Monitoring</button>
-            <button class="tab-btn pb-3 font-semibold text-zinc-400 whitespace-nowrap hover:text-blue-400 transition flex items-center" onclick="switchTab('tab2', this)">Riwayat & Log</button>
+            <button class="tab-btn pb-3 font-semibold text-zinc-400 whitespace-nowrap hover:text-blue-400 transition" onclick="switchTab('tab2', this)">Riwayat & Log</button>
             <button class="tab-btn pb-3 font-semibold text-zinc-400 whitespace-nowrap hover:text-blue-400 transition" onclick="switchTab('tab3', this)">Diagnostik AI</button>
+            <button class="tab-btn pb-3 font-semibold text-zinc-400 whitespace-nowrap hover:text-blue-400 transition flex items-center gap-1.5" onclick="switchTab('tab4', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Pengaturan
+            </button>
         </nav>
 
         <!-- Tab 1: Live Monitoring -->
@@ -106,50 +91,52 @@
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <!-- CCTV View -->
                 <div class="lg:col-span-2 glass-card rounded-2xl p-4 md:p-5 flex flex-col relative group">
-                    <h2 class="text-lg md:text-xl font-bold mb-4 text-zinc-200 flex items-center">
-                        <svg class="w-5 h-5 mr-2 text-zinc-400 group-hover:text-blue-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                        Live Feed Visi Kamera
-                    </h2>
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg md:text-xl font-bold text-zinc-200 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-zinc-400 group-hover:text-blue-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            Live Feed Kamera
+                        </h2>
+                        <!-- Camera selector -->
+                        <select id="camera-select" class="input-field w-auto text-xs" onchange="switchCamera(this.value)">
+                            <option value="">Pilih Kamera...</option>
+                        </select>
+                    </div>
                     <div class="flex-grow bg-black rounded-lg border border-zinc-700 flex items-center justify-center relative overflow-hidden h-[250px] md:h-[300px] lg:h-auto min-h-[300px] shadow-inner group-hover:border-blue-500/50 transition-colors">
-                        <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 pointer-events-none mix-blend-screen"></div>
-                        <div class="text-center z-10">
+                        <img id="camera-frame" class="absolute inset-0 w-full h-full object-contain hidden" alt="Camera Feed">
+                        <div id="camera-placeholder" class="text-center z-10">
                             <svg class="w-12 h-12 md:w-16 md:h-16 text-zinc-700 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                            <span class="text-zinc-500 font-medium text-xs md:text-sm bg-zinc-900/80 backdrop-blur px-3 py-1 rounded-md border border-zinc-800 tracking-widest">KONEKSI KAMERA ESP32-CAM</span>
+                            <span class="text-zinc-500 font-medium text-xs md:text-sm bg-zinc-900/80 backdrop-blur px-3 py-1 rounded-md border border-zinc-800 tracking-widest">MENUNGGU KAMERA RTSP</span>
                         </div>
                         <div class="absolute top-3 left-3 md:top-4 md:left-4 flex gap-2 items-center bg-black/60 px-2.5 py-1 rounded-md">
-                            <span class="flex h-2.5 w-2.5 md:h-3 md:w-3 relative">
+                            <span class="flex h-2.5 w-2.5 relative">
                               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                              <span class="relative inline-flex rounded-full h-2.5 w-2.5 md:h-3 md:w-3 bg-red-500"></span>
+                              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
                             </span>
-                            <span class="text-[10px] md:text-xs font-bold text-red-500">REC / BROADCAST</span>
+                            <span id="camera-label" class="text-[10px] md:text-xs font-bold text-red-500">REC</span>
                         </div>
-                        <div class="absolute bottom-3 right-3 md:bottom-4 md:right-4 text-zinc-500 font-mono text-[10px] md:text-xs bg-black/50 px-2 py-1 rounded" id="camera-timestamp">
-                            --:--:--
-                        </div>
+                        <div class="absolute bottom-3 right-3 text-zinc-500 font-mono text-[10px] md:text-xs bg-black/50 px-2 py-1 rounded" id="camera-timestamp">--:--:--</div>
                     </div>
                 </div>
 
-                <!-- Metrics Set -->
+                <!-- Metrics + Sensor Cards -->
                 <div class="grid grid-cols-2 lg:grid-cols-1 gap-4 space-y-0 lg:space-y-4">
-                    <!-- Suhu -->
+                    <!-- MQ2 (Asap) -->
                     <div class="glass-card rounded-2xl p-4 md:p-6 border-l-4 border-l-orange-500 relative overflow-hidden group">
-                        <p class="text-xs md:text-sm text-zinc-400 font-semibold uppercase tracking-wide">Suhu Ruangan</p>
+                        <p class="text-xs md:text-sm text-zinc-400 font-semibold uppercase tracking-wide">MQ2 (Asap)</p>
                         <div class="flex items-baseline mt-1 md:mt-2">
-                            <span id="metric-suhu" class="text-3xl md:text-5xl font-extrabold text-white">--</span>
-                            <span class="text-sm md:text-xl text-orange-400 font-bold ml-1.5 md:ml-2">°C</span>
+                            <span id="metric-mq2" class="text-3xl md:text-5xl font-extrabold text-white">--</span>
+                            <span class="text-sm md:text-xl text-orange-400 font-bold ml-1.5 md:ml-2">ratio</span>
                         </div>
                     </div>
-                    
-                    <!-- Asap -->
+                    <!-- MQ7 (CO) -->
                     <div class="glass-card rounded-2xl p-4 md:p-6 border-l-4 border-l-zinc-300 relative overflow-hidden group">
-                        <p class="text-xs md:text-sm text-zinc-400 font-semibold uppercase tracking-wide">Tingkat Asap</p>
+                        <p class="text-xs md:text-sm text-zinc-400 font-semibold uppercase tracking-wide">MQ7 (CO)</p>
                         <div class="flex items-baseline mt-1 md:mt-2">
-                            <span id="metric-asap" class="text-3xl md:text-5xl font-extrabold text-white">--</span>
-                            <span class="text-sm md:text-xl text-zinc-400 font-bold ml-1.5 md:ml-2">%</span>
+                            <span id="metric-mq7" class="text-3xl md:text-5xl font-extrabold text-white">--</span>
+                            <span class="text-sm md:text-xl text-zinc-400 font-bold ml-1.5 md:ml-2">ratio</span>
                         </div>
                     </div>
-
-                    <!-- Probabilitas -->
+                    <!-- Probabilitas Gabungan -->
                     <div class="col-span-2 lg:col-span-1 glass-card rounded-2xl p-4 md:p-6 border-l-4 border-l-red-500 relative overflow-hidden group hover:border-red-500 transition-colors">
                         <p class="text-[10px] md:text-xs text-red-300/80 font-bold tracking-wide uppercase mb-1">PROBABILITAS GABUNGAN</p>
                         <div class="flex items-baseline md:mt-1 relative z-10 w-full justify-between items-end">
@@ -157,42 +144,66 @@
                                 <span id="metric-prob" class="text-5xl md:text-6xl font-black text-white drop-shadow-md">--</span>
                                 <span class="text-lg md:text-xl font-bold text-red-400 ml-1">%</span>
                             </div>
-                            <div class="opacity-10 group-hover:opacity-20 transition text-red-500 duration-500">
-                                <svg class="h-14 w-14 md:h-16 md:w-16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C7 2 3 6.47 3 12c0 2.27.76 4.37 2.04 6.04L4 19.1V22h2.9l1.06-1.04A9.97 9.97 0 0 0 12 22c5.53 0 10-4.47 10-10S17.53 2 12 2z"/></svg>
-                            </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Sensor Detail Grid (6 sensor) -->
+            <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
+                <div class="glass-card rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 font-semibold uppercase">MQ135</p>
+                    <p id="sensor-mq135" class="text-lg font-bold text-emerald-400 mt-1">--</p>
+                    <p class="text-[9px] text-zinc-600">Kualitas Udara</p>
+                </div>
+                <div class="glass-card rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 font-semibold uppercase">MQ2</p>
+                    <p id="sensor-mq2" class="text-lg font-bold text-orange-400 mt-1">--</p>
+                    <p class="text-[9px] text-zinc-600">Asap/Gas</p>
+                </div>
+                <div class="glass-card rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 font-semibold uppercase">MQ3</p>
+                    <p id="sensor-mq3" class="text-lg font-bold text-yellow-400 mt-1">--</p>
+                    <p class="text-[9px] text-zinc-600">Alkohol</p>
+                </div>
+                <div class="glass-card rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 font-semibold uppercase">MQ4</p>
+                    <p id="sensor-mq4" class="text-lg font-bold text-blue-400 mt-1">--</p>
+                    <p class="text-[9px] text-zinc-600">Metana</p>
+                </div>
+                <div class="glass-card rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 font-semibold uppercase">MQ5</p>
+                    <p id="sensor-mq5" class="text-lg font-bold text-purple-400 mt-1">--</p>
+                    <p class="text-[9px] text-zinc-600">LPG</p>
+                </div>
+                <div class="glass-card rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 font-semibold uppercase">MQ7</p>
+                    <p id="sensor-mq7-detail" class="text-lg font-bold text-red-400 mt-1">--</p>
+                    <p class="text-[9px] text-zinc-600">Karbon Monoksida</p>
                 </div>
             </div>
         </main>
 
         <!-- Tab 2: Riwayat & Log -->
         <main id="tab2" class="tab-content space-y-6">
-            <!-- HEADER TOOLBAR UNTUK EXPORT PDF -->
             <div class="flex justify-end mb-2">
-                <button onclick="downloadPDF()" class="flex items-center text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg shadow-[0_0_15px_rgba(79,70,229,0.3)] active:scale-95 transition focus:ring-2 focus:ring-indigo-400 focus:outline-none">
+                <button onclick="downloadPDF()" class="flex items-center text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg shadow-[0_0_15px_rgba(79,70,229,0.3)] active:scale-95 transition">
                     <svg class="w-4 h-4 mr-2 -ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     Unduh PDF Laporan
                 </button>
             </div>
-            
-            <div id="exportable-area" class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:bg-transparent rounded-2xl">
-                <!-- Line Chart -->
+            <div id="exportable-area" class="grid grid-cols-1 lg:grid-cols-2 gap-6 rounded-2xl">
                 <div class="glass-card rounded-2xl p-4 md:p-5 h-full">
                     <h2 class="text-lg md:text-xl font-bold mb-4 text-zinc-200 flex items-center">
                         <svg class="w-5 h-5 mr-2 text-indigo-400" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
-                        Pemantauan Temporal Sensor
+                        Pemantauan Sensor
                     </h2>
-                    <div class="h-64 md:h-[320px] w-full relative">
-                        <canvas id="liveChart"></canvas>
-                    </div>
+                    <div class="h-64 md:h-[320px] w-full relative"><canvas id="liveChart"></canvas></div>
                 </div>
-
-                <!-- Log Table -->
                 <div class="glass-card rounded-2xl p-4 md:p-5 flex flex-col h-[320px] md:h-[380px]">
                     <h2 class="text-lg md:text-xl font-bold mb-4 text-zinc-200 flex items-center">
                         <svg class="w-5 h-5 mr-2 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
-                        Insiden & Rekaman Waspada
+                        Insiden & Log
                     </h2>
                     <div class="overflow-y-auto flex-grow custom-scrollbar rounded-lg border border-zinc-800 bg-zinc-900/50" id="log-scroll-container">
                         <table class="w-full text-left text-xs md:text-sm whitespace-nowrap lg:whitespace-normal">
@@ -200,11 +211,11 @@
                                 <tr>
                                     <th class="px-3 py-2 md:px-4 md:py-3 font-semibold">Waktu</th>
                                     <th class="px-3 py-2 md:px-4 md:py-3 font-semibold">Tingkat</th>
-                                    <th class="px-3 py-2 md:px-4 md:py-3 font-semibold w-full">Deskripsi Anomali</th>
+                                    <th class="px-3 py-2 md:px-4 md:py-3 font-semibold w-full">Deskripsi</th>
                                 </tr>
                             </thead>
                             <tbody id="log-table-body" class="divide-y divide-zinc-800">
-                                <tr id="no-log-row"><td colspan="3" class="px-4 py-8 text-center text-zinc-500 italic">Mekanisme sistem berjalan aman.</td></tr>
+                                <tr id="no-log-row"><td colspan="3" class="px-4 py-8 text-center text-zinc-500 italic">Sistem berjalan aman.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -212,44 +223,37 @@
             </div>
         </main>
 
-        <!-- Tab 3: Diagnostik AI Multi-Modal -->
+        <!-- Tab 3: Diagnostik AI -->
         <main id="tab3" class="tab-content">
             <div class="glass-card rounded-3xl p-5 lg:p-10 max-w-5xl mx-auto shadow-2xl">
                 <div class="text-center mb-8 md:mb-12">
-                    <h2 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight mb-2">Fusi Model AI <span class="bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase ml-1 align-middle">Beta</span></h2>
-                    <p class="text-zinc-400 text-xs md:text-sm px-4">Integrasi Arsitektur Computer Vision & Algoritma Statistik Sensor berbasis XGBoost.</p>
+                    <h2 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight mb-2">Fusi Model AI</h2>
+                    <p class="text-zinc-400 text-xs md:text-sm px-4">YOLOv11 Computer Vision + XGBoost Sensor Prediction</p>
                 </div>
-                
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-4 lg:gap-8 items-center">
-                    <!-- YOLOv8 Card -->
+                    <!-- YOLO Card -->
                     <div class="bg-zinc-900/80 p-5 md:p-6 rounded-2xl border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)] relative overflow-hidden group hover:border-blue-500/40 transition">
                         <div class="absolute -right-12 -top-12 bg-blue-600/10 h-32 w-32 rounded-full blur-3xl group-hover:bg-blue-600/20 transition duration-500"></div>
-                        <div class="flex items-center mb-1">
-                            <h3 class="text-lg md:text-xl font-bold text-zinc-100 flex items-center">
-                                <span class="bg-blue-500/20 p-1.5 rounded-md text-blue-400 mr-2 border border-blue-500/30">
+                        <h3 class="text-lg md:text-xl font-bold text-zinc-100 flex items-center mb-1">
+                            <span class="bg-blue-500/20 p-1.5 rounded-md text-blue-400 mr-2 border border-blue-500/30">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                                </span> Visi YOLOv8
-                            </h3>
-                        </div>
-                        <p class="text-[10px] md:text-xs text-zinc-400 mb-4 border-b border-zinc-800 pb-3">Deteksi Presisi Tinggi Via Frame Kamera</p>
-                        
+                            </span> YOLOv11
+                        </h3>
+                        <p class="text-[10px] md:text-xs text-zinc-400 mb-4 border-b border-zinc-800 pb-3">Deteksi Api & Asap via Frame Kamera</p>
                         <div class="flex items-end justify-between mb-2">
-                            <span class="text-xs font-medium text-zinc-300">Tingkat Kepercayaan</span>
+                            <span class="text-xs font-medium text-zinc-300">Confidence</span>
                             <span id="ai-yolo-val" class="text-2xl md:text-3xl font-black text-blue-400">--%</span>
                         </div>
                         <div class="w-full bg-zinc-950 rounded-full h-3 md:h-4 mb-2 p-0.5 border border-zinc-800 shadow-inner">
                             <div id="ai-yolo-bar" class="bg-gradient-to-r from-blue-600 to-blue-400 h-full rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
                         </div>
                     </div>
-
-                    <!-- FUSION Core -->
+                    <!-- Fusion Core -->
                     <div class="flex flex-col items-center justify-center relative min-h-[160px] md:min-h-[200px]">
-                        <!-- Connecting lines (desktop only) -->
                         <div class="hidden md:flex absolute top-1/2 left-0 w-full -translate-y-1/2 justify-between px-2 z-0">
                             <svg class="w-1/3 text-blue-500/30 -ml-4" stroke="currentColor" fill="none" viewBox="0 0 100 20"><path stroke-dasharray="5,5" stroke-width="2" d="M0 10 Q 50 10 100 10"></path></svg>
                             <svg class="w-1/3 text-emerald-500/30 -mr-4" stroke="currentColor" fill="none" viewBox="0 0 100 20"><path stroke-dasharray="5,5" stroke-width="2" d="M0 10 Q 50 10 100 10"></path></svg>
                         </div>
-                        
                         <div class="z-10 bg-zinc-950 border border-purple-500/30 p-1.5 md:p-2 rounded-full shadow-[0_0_30px_rgba(168,85,247,0.15)] relative">
                             <div class="absolute inset-0 rounded-full border border-purple-500/50 animate-ping opacity-20"></div>
                             <div class="bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700 h-36 w-36 md:h-44 md:w-44 rounded-full flex flex-col items-center justify-center p-4 text-center">
@@ -258,21 +262,17 @@
                             </div>
                         </div>
                     </div>
-
                     <!-- XGBoost Card -->
                     <div class="bg-zinc-900/80 p-5 md:p-6 rounded-2xl border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)] relative overflow-hidden group hover:border-emerald-500/40 transition">
                         <div class="absolute -left-12 -bottom-12 bg-emerald-600/10 h-32 w-32 rounded-full blur-3xl group-hover:bg-emerald-600/20 transition duration-500"></div>
-                        <div class="flex items-center mb-1">
-                            <h3 class="text-lg md:text-xl font-bold text-zinc-100 flex items-center">
-                                <span class="bg-emerald-500/20 p-1.5 rounded-md text-emerald-400 mr-2 border border-emerald-500/30">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002-2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                                </span> ML XGBoost
-                            </h3>
-                        </div>
-                        <p class="text-[10px] md:text-xs text-zinc-400 mb-4 border-b border-zinc-800 pb-3">Perhitungan Telemetri Parameter Sensor</p>
-                        
-                         <div class="flex items-end justify-between mb-2">
-                            <span class="text-xs font-medium text-zinc-300">Estimasi Prediksi</span>
+                        <h3 class="text-lg md:text-xl font-bold text-zinc-100 flex items-center mb-1">
+                            <span class="bg-emerald-500/20 p-1.5 rounded-md text-emerald-400 mr-2 border border-emerald-500/30">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                            </span> XGBoost
+                        </h3>
+                        <p class="text-[10px] md:text-xs text-zinc-400 mb-4 border-b border-zinc-800 pb-3">Prediksi dari 6 Sensor MQ (ESP32)</p>
+                        <div class="flex items-end justify-between mb-2">
+                            <span class="text-xs font-medium text-zinc-300">Estimasi</span>
                             <span id="ai-xgboost-val" class="text-2xl md:text-3xl font-black text-emerald-400">--%</span>
                         </div>
                         <div class="w-full bg-zinc-950 rounded-full h-3 md:h-4 mb-2 p-0.5 border border-zinc-800 shadow-inner">
@@ -282,48 +282,115 @@
                 </div>
             </div>
         </main>
-    </div>
-    
-    <!-- Footer Teams (For Ervin, Akmal, Jascon, and Farhan) -->
-    <footer class="mt-auto py-5 border-t border-zinc-800 bg-zinc-950 text-center text-[10px] md:text-xs text-zinc-500 font-medium z-10 w-full relative drop-shadow-lg">
-        <button id="chat-toggle-btn" onclick="toggleChat()" class="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full p-4 shadow-[0_0_20px_rgba(79,70,229,0.6)] z-50 transition-all transform hover:scale-105 focus:outline-none">
-        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
-    </button>
 
-    <div id="chat-window" class="fixed bottom-24 right-4 md:right-8 w-[95vw] md:w-[650px] lg:w-[800px] bg-zinc-900 border border-zinc-700 rounded-2xl shadow-[0_15px_60px_rgba(0,0,0,0.8)] flex-col hidden z-50 overflow-hidden transform transition-all">
-        
-        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-4 flex justify-between items-center shadow-lg z-10 relative">
-            <div class="flex items-center gap-3">
-                <div class="bg-white/20 p-2 rounded-lg">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <!-- Tab 4: Pengaturan (Kamera, Sensor, Threshold) -->
+        <main id="tab4" class="tab-content space-y-6">
+            <!-- Kamera Management -->
+            <div class="glass-card rounded-2xl p-5 md:p-6">
+                <h2 class="text-xl font-bold text-zinc-200 mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    Manajemen Kamera RTSP/ONVIF
+                </h2>
+                <!-- Add Camera Form -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+                    <input type="text" id="new-cam-id" class="input-field" placeholder="ID (cth: cam_01)">
+                    <input type="text" id="new-cam-name" class="input-field" placeholder="Nama Kamera">
+                    <input type="text" id="new-cam-url" class="input-field md:col-span-1" placeholder="rtsp://user:pass@ip:port/stream">
+                    <button onclick="addCamera()" class="btn-primary flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        Tambah Kamera
+                    </button>
                 </div>
-                <div>
-                    <h3 class="text-white font-bold text-base md:text-lg leading-tight">Asisten K3 Darurat</h3>
-                    <p class="text-[11px] md:text-xs text-indigo-200 mt-0.5">Terhubung dengan Panduan K3 & Sensor AI</p>
+                <!-- Camera List -->
+                <div id="camera-list" class="space-y-2">
+                    <p class="text-xs text-zinc-500 italic">Belum ada kamera terdaftar. Tambahkan via form di atas.</p>
                 </div>
             </div>
-            <button onclick="toggleChat()" class="text-white/80 hover:text-white transition bg-white/10 hover:bg-white/20 p-1.5 rounded-lg">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-        </div>
-        
-        <div id="chat-messages" class="p-5 md:p-6 h-[60vh] min-h-[400px] max-h-[750px] overflow-y-auto flex flex-col space-y-5 custom-scrollbar bg-zinc-950 relative">
-            <div class="flex flex-col items-start w-full">
-                <div class="bg-zinc-800 text-zinc-200 text-sm md:text-base rounded-2xl rounded-tl-none px-5 py-4 max-w-[95%] border border-zinc-700 shadow-md leading-relaxed text-left break-words">
-                    Halo! Saya AI Asisten K3. Ada yang bisa saya bantu terkait prosedur evakuasi, SOP pemadaman, atau status ruangan saat ini?
+
+            <!-- Threshold Settings -->
+            <div class="glass-card rounded-2xl p-5 md:p-6">
+                <h2 class="text-xl font-bold text-zinc-200 mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                    Threshold & Bobot AI
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                        <label class="text-xs text-zinc-400 font-semibold uppercase">Batas Aman (%)</label>
+                        <input type="number" id="th-prob-aman" class="input-field mt-1" value="30" min="0" max="100">
+                        <p class="text-[10px] text-zinc-600 mt-1">Di bawah nilai ini = STATUS AMAN</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-zinc-400 font-semibold uppercase">Batas Waspada (%)</label>
+                        <input type="number" id="th-prob-waspada" class="input-field mt-1" value="70" min="0" max="100">
+                        <p class="text-[10px] text-zinc-600 mt-1">Di atas nilai ini = STATUS BAHAYA</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-zinc-400 font-semibold uppercase">YOLO Threshold (%)</label>
+                        <input type="number" id="th-yolo-threshold" class="input-field mt-1" value="50" min="0" max="100">
+                        <p class="text-[10px] text-zinc-600 mt-1">Batas YOLO dianggap high-confidence</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-zinc-400 font-semibold uppercase">Bobot YOLO (High)</label>
+                        <input type="number" id="th-yolo-weight-high" class="input-field mt-1" value="0.7" min="0" max="1" step="0.05">
+                        <p class="text-[10px] text-zinc-600 mt-1">Bobot YOLO saat confidence tinggi</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-zinc-400 font-semibold uppercase">Bobot YOLO (Low)</label>
+                        <input type="number" id="th-yolo-weight-low" class="input-field mt-1" value="0.3" min="0" max="1" step="0.05">
+                        <p class="text-[10px] text-zinc-600 mt-1">Bobot YOLO saat confidence rendah</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-zinc-400 font-semibold uppercase">Interval YOLO (detik)</label>
+                        <input type="number" id="th-yolo-interval" class="input-field mt-1" value="3" min="1" max="30" step="0.5">
+                        <p class="text-[10px] text-zinc-600 mt-1">Jeda antar inference YOLO</p>
+                    </div>
                 </div>
+                <button onclick="saveThresholds()" class="btn-primary mt-4 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    Simpan Threshold
+                </button>
+                <span id="threshold-status" class="text-xs text-emerald-400 ml-3 hidden">Tersimpan!</span>
             </div>
-        </div>
-        
-        <div class="p-4 bg-zinc-900 border-t border-zinc-800 flex items-center gap-3">
-            <input type="text" id="chat-input" class="flex-grow bg-zinc-950 border border-zinc-700 rounded-xl px-5 py-3.5 text-sm md:text-base text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors shadow-inner" placeholder="Tanyakan SOP penanganan kebakaran..." onkeypress="handleChatEnter(event)">
-            <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl p-3.5 transition active:scale-95 shadow-lg flex items-center justify-center">
-                <svg class="w-6 h-6 transform rotate-90" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
-            </button>
-        </div>
+        </main>
     </div>
+
+    <!-- Footer + Chat -->
+    <footer class="mt-auto py-5 border-t border-zinc-800 bg-zinc-950 text-center text-[10px] md:text-xs text-zinc-500 font-medium z-10 w-full relative">
+        <button id="chat-toggle-btn" onclick="toggleChat()" class="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full p-4 shadow-[0_0_20px_rgba(79,70,229,0.6)] z-50 transition-all transform hover:scale-105 focus:outline-none">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+        </button>
+
+        <div id="chat-window" class="fixed bottom-24 right-4 md:right-8 w-[95vw] md:w-[650px] lg:w-[800px] bg-zinc-900 border border-zinc-700 rounded-2xl shadow-[0_15px_60px_rgba(0,0,0,0.8)] flex-col hidden z-50 overflow-hidden transform transition-all">
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-4 flex justify-between items-center shadow-lg z-10 relative">
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-2 rounded-lg">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-white font-bold text-base md:text-lg leading-tight">Asisten K3 Darurat</h3>
+                        <p class="text-[11px] md:text-xs text-indigo-200 mt-0.5">Panduan K3 & Sensor AI (Lokal)</p>
+                    </div>
+                </div>
+                <button onclick="toggleChat()" class="text-white/80 hover:text-white transition bg-white/10 hover:bg-white/20 p-1.5 rounded-lg">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div id="chat-messages" class="p-5 md:p-6 h-[60vh] min-h-[400px] max-h-[750px] overflow-y-auto flex flex-col space-y-5 custom-scrollbar bg-zinc-950 relative">
+                <div class="flex flex-col items-start w-full">
+                    <div class="bg-zinc-800 text-zinc-200 text-sm md:text-base rounded-2xl rounded-tl-none px-5 py-4 max-w-[95%] border border-zinc-700 shadow-md leading-relaxed text-left break-words">
+                        Halo! Saya AI Asisten K3. Ada yang bisa saya bantu terkait prosedur evakuasi, SOP pemadaman, atau status ruangan saat ini?
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 bg-zinc-900 border-t border-zinc-800 flex items-center gap-3">
+                <input type="text" id="chat-input" class="flex-grow bg-zinc-950 border border-zinc-700 rounded-xl px-5 py-3.5 text-sm md:text-base text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors shadow-inner" placeholder="Tanyakan SOP penanganan kebakaran..." onkeypress="handleChatEnter(event)">
+                <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl p-3.5 transition active:scale-95 shadow-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 transform rotate-90" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+                </button>
+            </div>
+        </div>
         Proyek PBL Semester 6 &copy; 2026. Dikembangkan dengan dedikasi penuh. <br class="md:hidden">
-        <span class="font-bold text-zinc-400 mt-1 inline-block">Tim Pengembang: Ervin, Akmal, Jascon, dan Farhan</span>
+        <span class="font-bold text-zinc-400 mt-1 inline-block">Tim: Ervin, Akmal, Jascon, dan Farhan</span>
     </footer>
 
     <script src="/static/js/dashboard.js"></script>
