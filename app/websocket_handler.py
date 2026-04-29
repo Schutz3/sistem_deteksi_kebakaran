@@ -192,8 +192,7 @@ async def websocket_legacy(websocket: WebSocket):
 
             await websocket.send_text(json.dumps({
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "suhu": mq2_val,
-                "asap": mq7_val,
+                "sensor": sensor if sensor else None,
                 "prob_yolo": prob_yolo,
                 "prob_xgboost": prob_xgb,
                 "prob_akhir": prob_akhir,

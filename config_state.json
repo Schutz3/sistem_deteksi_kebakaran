@@ -1,0 +1,18 @@
+{
+  "cameras": {
+    "cam_01": {
+      "name": "TEST",
+      "rtsp_url": "rtsp://admin:12345678@10.0.0.244:8554/Streaming/Channels/101",
+      "enabled": true
+    }
+  },
+  "thresholds": {
+    "prob_aman": 30,
+    "prob_waspada": 70,
+    "yolo_weight_high": 0.7,
+    "yolo_weight_low": 0.3,
+    "yolo_threshold": 50,
+    "yolo_interval": 3.0,
+    "sensor_interval": 2.0
+  }
+}

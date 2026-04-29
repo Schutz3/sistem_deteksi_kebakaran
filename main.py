@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
         print("[Startup] Belum ada kamera dikonfigurasi. Tambah via dashboard.")
 
     print("=" * 50)
-    print("✅ Sistem siap! Buka http://localhost:8000")
+    print("✅ Sistem siap! Jalankan server via: uvicorn main:app --reload")
     print("=" * 50)
 
     yield

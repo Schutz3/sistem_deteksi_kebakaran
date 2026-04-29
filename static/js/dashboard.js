@@ -24,8 +24,8 @@ const liveChart = new Chart(ctx, {
     type: 'line',
     data: {
         labels: [], datasets: [
-            { label: 'MQ2 (Asap)', borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 2, data: [], yAxisID: 'y' },
-            { label: 'MQ7 (CO)', borderColor: '#a1a1aa', backgroundColor: 'rgba(161,161,170,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 2, data: [], yAxisID: 'y1' }
+            { label: 'MQ-2 (Gas)', borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 2, data: [], yAxisID: 'y' },
+            { label: 'MQ-7 (CO)', borderColor: '#a1a1aa', backgroundColor: 'rgba(161,161,170,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 2, data: [], yAxisID: 'y1' }
         ]
     },
     options: {

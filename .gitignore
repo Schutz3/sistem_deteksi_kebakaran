@@ -5,3 +5,5 @@ SYSTEM_MAP.md
 chroma_db_native/
 
 models/*.gguf
+models/train_yolo/dataset
+models/train_chatbot/dataset_100k.jsonl
